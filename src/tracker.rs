@@ -2,6 +2,8 @@ use anyhow::{Context, Result};
 use serde_bytes::ByteBuf;
 use std::net::{Ipv4Addr, Ipv6Addr};
 
+pub struct StringIpAddr(pub String);
+
 #[derive(Debug, Deserialize, Serialize)]
 pub enum IpAddr {
     V4(Ipv4Addr),
@@ -11,10 +13,11 @@ pub enum IpAddr {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct PeerStruct {
+    #[serde(default)]
     #[serde(rename = "peer id")]
-    pub peer_id: String,
+    pub peer_id: Option<String>,
     pub ip: IpAddr,
-    pub port: i64,
+    pub port: u16,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -61,9 +64,36 @@ pub async fn announce_buffer(url: &str) -> Result<Vec<u8>> {
 }
 
 pub fn announce_response_to_struct(response: Vec<u8>) -> Result<TrackerResponse> {
-  serde_bencode::from_bytes(&response)
+  let response_struct = serde_bencode::from_bytes(&response)
     .with_context(|| {
       let str_resp = String::from_utf8_lossy(&response);
       format!("Bad tracker response {}", str_resp)
-    })
+    });
+  
+  let normalized_response = {
+    let mut response_struct: TrackerResponse = response_struct?;
+    match response_struct.peers {
+      Peers::ByteBuf(peers) => {
+        let peers =
+          peers
+            .to_vec()
+            .chunks(6)
+            .map(|chunk| {
+              let ip = Ipv4Addr::new(chunk[0], chunk[1], chunk[2], chunk[3]);
+              let port  = ((chunk[4] as u16) << 8) | chunk[5] as u16;
+              PeerStruct {
+                peer_id: None,
+                ip: IpAddr::V4(ip),
+                port
+              }
+            })
+            .collect();
+        response_struct.peers = Peers::PeerStruct(peers);
+      }
+      Peers::PeerStruct(_) => {}
+    }
+    response_struct
+  };
+
+  Ok(normalized_response)
 }
