@@ -1,12 +1,14 @@
+use anyhow::{Context, Result};
+
 use serde_bencode::de;
 use serde_bytes::ByteBuf;
-use std::io::{self, Read};
+use std::io::{Read};
 
 #[derive(Debug, Deserialize)]
-pub(crate)struct Node(String, i64);
+pub struct Node(String, i64);
 
 #[derive(Debug, Deserialize)]
-pub(crate)struct File {
+pub struct File {
     path: Vec<String>,
     length: i64,
     #[serde(default)]
@@ -15,7 +17,7 @@ pub(crate)struct File {
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
-pub(crate)struct Info {
+pub struct Info {
     pub name: String,
     pub pieces: ByteBuf,
     #[serde(rename = "piece length")]
@@ -36,7 +38,7 @@ pub(crate)struct Info {
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct Torrent {
+pub struct MetaInfo {
     info: Info,
     #[serde(default)]
     announce: Option<String>,
@@ -59,26 +61,26 @@ pub(crate) struct Torrent {
     created_by: Option<String>,
 }
 
-pub(crate) fn render_torrent(torrent: &Torrent) {
-    println!("name:\t\t{}", torrent.info.name);
-    println!("announce:\t{:?}", torrent.announce);
-    println!("nodes:\t\t{:?}", torrent.nodes);
-    if let Some(al) = &torrent.announce_list {
+pub fn render_meta_info(meta_info: &MetaInfo) {
+    println!("name:\t\t{}", meta_info.info.name);
+    println!("announce:\t{:?}", meta_info.announce);
+    println!("nodes:\t\t{:?}", meta_info.nodes);
+    if let Some(al) = &meta_info.announce_list {
         for a in al {
             println!("announce list:\t{}", a[0]);
         }
     }
-    println!("httpseeds:\t{:?}", torrent.httpseeds);
-    println!("creation date:\t{:?}", torrent.creation_date);
-    println!("comment:\t{:?}", torrent.comment);
-    println!("created by:\t{:?}", torrent.created_by);
-    println!("encoding:\t{:?}", torrent.encoding);
-    println!("piece length:\t{:?}", torrent.info.piece_length);
-    println!("private:\t{:?}", torrent.info.private);
-    println!("root hash:\t{:?}", torrent.info.root_hash);
-    println!("md5sum:\t\t{:?}", torrent.info.md5sum);
-    println!("path:\t\t{:?}", torrent.info.path);
-    if let Some(files) = &torrent.info.files {
+    println!("httpseeds:\t{:?}", meta_info.httpseeds);
+    println!("creation date:\t{:?}", meta_info.creation_date);
+    println!("comment:\t{:?}", meta_info.comment);
+    println!("created by:\t{:?}", meta_info.created_by);
+    println!("encoding:\t{:?}", meta_info.encoding);
+    println!("piece length:\t{:?}", meta_info.info.piece_length);
+    println!("private:\t{:?}", meta_info.info.private);
+    println!("root hash:\t{:?}", meta_info.info.root_hash);
+    println!("md5sum:\t\t{:?}", meta_info.info.md5sum);
+    println!("path:\t\t{:?}", meta_info.info.path);
+    if let Some(files) = &meta_info.info.files {
         for f in files {
             println!("file path:\t{:?}", f.path);
             println!("file length:\t{}", f.length);
@@ -87,15 +89,14 @@ pub(crate) fn render_torrent(torrent: &Torrent) {
     }
 }
 
-fn main() {
-    let stdin = io::stdin();
+pub fn parse_meta_info_buffer(buffer: &Vec<u8>) -> Result<MetaInfo> {
+    de::from_bytes::<MetaInfo>(&buffer)
+        .context("Failed to parse meta info buffer")
+}
+
+pub fn read_meta_info_file(str: &str) -> Result<MetaInfo> {
+    let mut file = std::fs::File::open(str)?;
     let mut buffer = Vec::new();
-    let mut handle = stdin.lock();
-    match handle.read_to_end(&mut buffer) {
-        Ok(_) => match de::from_bytes::<Torrent>(&buffer) {
-            Ok(t) => render_torrent(&t),
-            Err(e) => println!("ERROR: {e:?}"),
-        },
-        Err(e) => println!("ERROR: {e:?}"),
-    }
+    file.read_to_end(&mut buffer)?;
+    parse_meta_info_buffer(&buffer)
 }
