@@ -1,13 +1,15 @@
 use anyhow::{Context, Result};
+use sha1::{Sha1, Digest};
 
 use serde_bencode::de;
+use serde_bencode::ser;
 use serde_bytes::ByteBuf;
 use std::io::{Read};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Node(String, i64);
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct File {
     path: Vec<String>,
     length: i64,
@@ -16,7 +18,7 @@ pub struct File {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Info {
     pub name: String,
     pub pieces: ByteBuf,
@@ -37,28 +39,28 @@ pub struct Info {
     pub root_hash: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct MetaInfo {
-    info: Info,
+    pub info: Info,
     #[serde(default)]
-    announce: Option<String>,
+    pub announce: Option<String>,
     #[serde(default)]
-    nodes: Option<Vec<Node>>,
+    pub nodes: Option<Vec<Node>>,
     #[serde(default)]
-    encoding: Option<String>,
+    pub encoding: Option<String>,
     #[serde(default)]
-    httpseeds: Option<Vec<String>>,
+    pub httpseeds: Option<Vec<String>>,
     #[serde(default)]
     #[serde(rename = "announce-list")]
-    announce_list: Option<Vec<Vec<String>>>,
+    pub announce_list: Option<Vec<Vec<String>>>,
     #[serde(default)]
     #[serde(rename = "creation date")]
-    creation_date: Option<i64>,
+    pub creation_date: Option<i64>,
     #[serde(rename = "comment")]
-    comment: Option<String>,
+    pub comment: Option<String>,
     #[serde(default)]
     #[serde(rename = "created by")]
-    created_by: Option<String>,
+    pub created_by: Option<String>,
 }
 
 pub fn render_meta_info(meta_info: &MetaInfo) {
@@ -99,4 +101,30 @@ pub fn read_meta_info_file(str: &str) -> Result<MetaInfo> {
     let mut buffer = Vec::new();
     file.read_to_end(&mut buffer)?;
     parse_meta_info_buffer(&buffer)
+}
+
+pub fn info_buffer(info: &Info) -> Result<Vec<u8>> {
+    ser::to_bytes(info)
+        .context("Failed to serialize info")
+}
+
+pub fn info_buffer_hash(buffer: &Vec<u8>) -> Result<Vec<u8>> {
+    let mut hasher = Sha1::new();
+    hasher.update(buffer);
+    Ok(
+        hasher
+            .finalize()
+            .as_slice()
+            .to_vec()
+    )
+}
+
+pub fn info_hash_buffer(meta_info: &MetaInfo) -> Result<Vec<u8>> {
+    let buffer = info_buffer(&meta_info.info).unwrap();
+    info_buffer_hash(&buffer)
+}
+
+pub fn info_hash_hex(meta_info: &MetaInfo) -> String {
+    let buffer = info_hash_buffer(meta_info).unwrap();
+    hex::encode(buffer)
 }
