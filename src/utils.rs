@@ -2,7 +2,7 @@ use std::{fs::File, io::Read, net::{Ipv4Addr, Ipv6Addr}};
 
 use anyhow::Result;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum IpAddr {
     V4(Ipv4Addr),
     V6(Ipv6Addr),

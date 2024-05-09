@@ -2,6 +2,7 @@
 extern crate serde_derive;
 
 use futures::{FutureExt, StreamExt};
+use reqwest::Url;
 use urlencoding::{encode_binary};
 use anyhow::Result;
 
@@ -31,7 +32,47 @@ async fn main() -> Result<()> {
 
     // loop through the scrapes stream and log the results
     scrapes_stream.for_each(|scrape| async move {
-        println!("scrape: {} {}", scrape.url, scrape.response.is_ok());
+        let url = Url::parse(&scrape.url).unwrap();
+        let hostname = url.host_str().unwrap();
+        let is_ok = match scrape.response.is_ok() {
+            true => "ok",
+            false => "failed"
+        };
+
+        if scrape.response.is_err() {
+            println!("{} {}", hostname, scrape.response.unwrap_err());
+            return
+        }
+
+        let files = scrape
+            .response
+            .unwrap()
+            .files
+            .iter()
+            .map(|file_tuple| file_tuple.1.clone())
+            .collect::<Vec<tracker::TrackerScrapeResponseFile>>();
+
+        let mut files_incomplete =
+            files
+                .iter()
+                .map(|file| file.incomplete)
+                .collect::<Vec<i64>>();
+        files_incomplete.sort();
+
+        let mut files_complete =
+            files
+                .iter()
+                .map(|file| file.complete)
+                .collect::<Vec<i64>>();
+        files_complete.sort();
+
+        let leechers =
+            files_incomplete.last().unwrap_or(&0).to_owned();
+
+        let seeders =
+            files_complete.last().unwrap_or(&0).to_owned();
+
+        println!("{} {} seeders: {} leechers: {}", hostname, is_ok, seeders, leechers);
     }).await;
 
 
