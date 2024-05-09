@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate serde_derive;
 
+use futures::{FutureExt, StreamExt};
 use urlencoding::{encode_binary};
 use anyhow::Result;
 
@@ -11,7 +12,7 @@ mod peer;
 mod bitfield;
 
 use meta_info::{read_meta_info_file, render_meta_info, info_hash_hex, info_hash_buffer};
-use tracker::{fetch_announce_buffer_to_struct, fetch_scrape_meta_info, fetch_announce};
+use tracker::{fetch_announce_buffer_to_struct, stream_scrape_meta_info, fetch_scrape_meta_info, fetch_announce};
 use utils::{read_file};
 
 #[tokio::main]
@@ -25,12 +26,27 @@ async fn main() -> Result<()> {
     let result = encode_binary(&info_hash_buffer);
     println!("infohash uri: {}", result);
 
-    let scrape_responses = fetch_scrape_meta_info(&meta_info).await?;
-    println!("scrapes: {:?}", scrape_responses);
 
-    let first_scrape = scrape_responses.first().unwrap();
-    let announce_response = fetch_announce(&first_scrape.url).await?;
-    println!("first scrape announce: {:?}", announce_response);
+    let scrapes_stream = stream_scrape_meta_info(&meta_info)?;
+
+    // loop through the scrapes stream and log the results
+    scrapes_stream.for_each(|scrape| async move {
+        println!("scrape: {} {}", scrape.url, scrape.response.is_ok());
+    }).await;
+
+
+
+
+    // let scrape_responses = fetch_scrape_meta_info(&meta_info).await?;
+    // // println!("scrapes: {:?}", scrape_responses);
+
+    // let first_scrape = scrape_responses.first().unwrap();
+
+
+
+
+    // let announce_response = fetch_announce(&first_scrape.announce_url).await?;
+    // println!("first scrape announce: {:?}", announce_response);
 
     // let scrape_url = "http://tracker.opentrackr.org:1337/scrape?info_hash=%08%AD%A5%A7%A6%18%3A%AE%1E%09%D81%DFgH%D5f%09Z%10";
     // let scrape_response = tracker::fetch_scrape(scrape_url).await?;

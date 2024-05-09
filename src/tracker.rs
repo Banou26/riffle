@@ -1,5 +1,7 @@
-use std::{collections::BTreeMap, net::Ipv4Addr};
+use std::{collections::BTreeMap, net::Ipv4Addr, time::Instant};
 
+use futures::stream::FuturesUnordered;
+use futures::Future;
 use futures::{future::{join_all, try_join_all}, TryFutureExt};
 use anyhow::{Context, Result, Error};
 use serde_bytes::ByteBuf;
@@ -47,7 +49,7 @@ pub struct TrackerAnnounceResponse {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct TrackerScrapeFile {
+pub struct TrackerScrapeResponseFile {
   complete: i64,
   #[serde(default)]
   downloaded: Option<i64>,
@@ -59,7 +61,7 @@ pub struct TrackerScrapeFile {
 #[allow(dead_code)]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct TrackerScrapeResponse {
-  files: BTreeMap<ByteBuf, TrackerScrapeFile>,
+  files: BTreeMap<ByteBuf, TrackerScrapeResponseFile>,
 
   #[serde(default)]
   #[serde(rename = "failure reason")]
@@ -70,14 +72,11 @@ pub struct TrackerScrapeResponse {
   warning_message: Option<String>,
 }
 
-
 #[derive(Debug)]
-pub struct TrackerScrapeNormalized {
+pub struct Scrape {
   pub url: String,
-
-  pub files: BTreeMap<ByteBuf, TrackerScrapeFile>,
-  pub failure_reason: Option<String>,
-  pub warning_message: Option<String>,
+  pub at: Instant,
+  pub response: Result<TrackerScrapeResponse>
 }
 
 /**
@@ -100,34 +99,27 @@ pub async fn fetch_scrape_buffer(url: &str) -> Result<Vec<u8>> {
   Ok(buffer)
 }
 
-pub fn fetch_scrape_buffer_to_struct(response: Vec<u8>) -> Result<TrackerScrapeResponse> {
-  let response_struct = serde_bencode::from_bytes(&response)
-    .with_context(|| {
-      let str_resp = String::from_utf8_lossy(&response);
-      format!("Bad tracker scrape response {}", str_resp)
-    });
-  
-  Ok(response_struct?)
+pub fn parse_scrape_buffer(response: Vec<u8>) -> Result<TrackerScrapeResponse> {
+  serde_bencode::from_bytes(&response)
+    .context(format!("Bad tracker scrape response {}", String::from_utf8_lossy(&response)))
 }
 
-pub async fn fetch_scrape(url: &str) -> Result<TrackerScrapeNormalized> {
-  let resp: Vec<u8> =
-    fetch_scrape_buffer(url)
-    .await
-    .context("Failed to fetch scrape")?;
-  let scrape_response =
-    fetch_scrape_buffer_to_struct(resp)
-      .context("Failed to parse scrape response")?;
+pub async fn fetch_scrape(url: String) -> Scrape {
+  let response =
+    fetch_scrape_buffer(url.as_str())
+      .await
+      .context(format!("Failed to fetch scrape from {}", url))
+      .and_then(parse_scrape_buffer)
+      .context(format!("Failed to parse scrape response from {}", url));
 
-  Ok(TrackerScrapeNormalized {
+  Scrape {
     url: url.to_string(),
-    files: scrape_response.files,
-    failure_reason: scrape_response.failure_reason,
-    warning_message: scrape_response.warning_message
-  })
+    at: Instant::now(),
+    response
+  }
 }
 
-pub async fn fetch_scrape_meta_info(meta_info: &crate::meta_info::MetaInfo) -> Result<Vec<TrackerScrapeNormalized>> {
+pub async fn fetch_scrape_meta_info(meta_info: &crate::meta_info::MetaInfo) -> Result<Vec<Scrape>> {
   let info_hash_buffer = info_hash_buffer(&meta_info).context("Failed to get info hash")?;
   let url_encoded_info_hash = encode_binary(&info_hash_buffer);
 
@@ -145,19 +137,35 @@ pub async fn fetch_scrape_meta_info(meta_info: &crate::meta_info::MetaInfo) -> R
   let responses =
     scrape_urls
       .iter()
-      .map(|url| fetch_scrape(url))
+      .map(|url| fetch_scrape(url.clone()))
       .collect::<Vec<_>>();
 
   let response = join_all(responses).await;
-  let valid_responses = response
-    .into_iter()
-    .filter(|r| r.is_ok())
-    .collect::<Vec<_>>()
-    .into_iter()
-    .map(|r| r.context("Failed to fetch scrape"))
-    .collect::<Result<Vec<TrackerScrapeNormalized>>>()?;
+  Ok(response)
+}
 
-  Ok(valid_responses)
+pub fn stream_scrape_meta_info(meta_info: &crate::meta_info::MetaInfo) -> Result<FuturesUnordered<impl Future<Output = Scrape>>> {
+  let info_hash_buffer = info_hash_buffer(&meta_info).context("Failed to get info hash")?;
+  let url_encoded_info_hash = encode_binary(&info_hash_buffer);
+
+  let tracker_urls = tracker_urls(meta_info);
+  let scrape_urls = tracker_urls
+    .iter()
+    .map(|announce| {
+      let mut url: String = announce.clone();
+      url.push_str("scrape?info_hash=");
+      url.push_str(&url_encoded_info_hash);
+      url.replacen("udp", "http", 1)
+    })
+    .collect::<Vec<_>>();
+
+  let futures: FuturesUnordered<_> =
+    scrape_urls
+      .iter()
+      .map(|url| fetch_scrape(url.clone()))
+      .collect();
+
+  Ok(futures)
 }
 
 /**
