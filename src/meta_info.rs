@@ -128,3 +128,16 @@ pub fn info_hash_hex(meta_info: &MetaInfo) -> String {
     let buffer = info_hash_buffer(meta_info).unwrap();
     hex::encode(buffer)
 }
+
+pub fn tracker_urls(meta_info: &MetaInfo) -> Vec<String> {
+    let mut urls = Vec::new();
+    if let Some(announce) = &meta_info.announce {
+        urls.push(announce.replace("announce", ""));
+    }
+    if let Some(announce_list) = &meta_info.announce_list {
+        for announce in announce_list {
+            urls.push(announce[0].replace("announce", ""));
+        }
+    }
+    urls
+}
