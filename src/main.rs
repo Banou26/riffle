@@ -11,13 +11,54 @@ mod tracker;
 mod utils;
 mod peer;
 mod bitfield;
+mod client;
+mod torrent;
 
 use meta_info::{read_meta_info_file, render_meta_info, info_hash_hex, info_hash_buffer};
 use tracker::{fetch_announce_buffer_to_struct, stream_scrape_meta_info, fetch_scrape_meta_info, fetch_announce};
 use utils::{read_file};
+// use crate::client::Client;
+// use crate::torrent::Torrent;
+
+use futures_signals::signal_map::{SignalMapExt, MapDiff, MutableBTreeMap};
+
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let map: MutableBTreeMap<&str, i32> = MutableBTreeMap::new();
+    let signal = map.signal_map_cloned();
+
+    tokio::spawn(async move {
+        let _ = signal.for_each(|change| {
+            match change {
+                MapDiff::Replace { entries } => {
+                    println!("Replace: {:?}", entries);
+                },
+                MapDiff::Insert { key, value } => {
+                    println!("Insert: {:?} {:?}", key, value);
+                },
+                MapDiff::Update { key, value } => {
+                    println!("Update: {:?} {:?}", key, value);
+                },
+                MapDiff::Remove { key } => {
+                    println!("Remove: {:?}", key);
+                },
+                MapDiff::Clear {} => {
+                    println!("Clear");
+                },
+            }
+            async {}
+        }).await;
+    });
+
+
+    let mut lock = map.lock_mut();
+    lock.insert("foo", 5);
+    lock.insert("bar", 10);
+
+
+    // let client = Client::new();
+
     let meta_info: meta_info::MetaInfo = read_meta_info_file("./torrent_test.torrent").unwrap();
     let info_hash = info_hash_hex(&meta_info);
     let info_hash_buffer = info_hash_buffer(&meta_info).unwrap();
