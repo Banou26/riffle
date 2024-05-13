@@ -6,10 +6,10 @@ use serde_bencode::ser;
 use serde_bytes::ByteBuf;
 use std::io::{Read};
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Node(String, i64);
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct File {
     path: Vec<String>,
     length: i64,
@@ -18,7 +18,7 @@ pub struct File {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Info {
     pub name: String,
     pub pieces: ByteBuf,
@@ -39,7 +39,7 @@ pub struct Info {
     pub root_hash: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MetaInfo {
     pub info: Info,
     #[serde(default)]
