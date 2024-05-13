@@ -17,16 +17,27 @@ mod torrent;
 use meta_info::{read_meta_info_file, render_meta_info, info_hash_hex, info_hash_buffer};
 use tracker::{fetch_announce_buffer_to_struct, stream_scrape_meta_info, fetch_scrape_meta_info, fetch_announce};
 use utils::{read_file};
+use crossbeam_channel::{unbounded, Sender};
 // use crate::client::Client;
 // use crate::torrent::Torrent;
 
 use futures_signals::signal_map::{SignalMapExt, MapDiff, MutableBTreeMap};
 
+#[derive(Clone, Debug)]
+struct Callback {
+    pub str: String
+}
+
+#[derive(Clone, Debug)]
+struct TestStruct {
+    pub str: String,
+    pub callback: Sender<Callback>
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let map: MutableBTreeMap<&str, i32> = MutableBTreeMap::new();
-    let signal = map.signal_map_cloned();
+    let signal = map.signal_map();
 
     tokio::spawn(async move {
         let _ = signal.for_each(|change| {
@@ -56,6 +67,24 @@ async fn main() -> Result<()> {
     lock.insert("foo", 5);
     lock.insert("bar", 10);
 
+
+
+    let (s, r) = unbounded();
+
+
+    let (s_callback, r_callback) = unbounded();
+    
+
+    s.send(TestStruct { callback: s_callback, str: "foo".to_string() }).unwrap();
+
+
+    let call = r.recv().unwrap();
+    call.callback.send(Callback { str: "bar".to_string() }).unwrap();
+
+    let call_response = r_callback.recv().unwrap();
+    // Receive the message from the channel.
+    println!("call {:?}", call.str);
+    println!("call response {:?}", call_response.str);
 
     // let client = Client::new();
 
