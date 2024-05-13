@@ -1,178 +1,153 @@
-#[macro_use]
-extern crate serde_derive;
+use std::io;
 
-use futures::{FutureExt, StreamExt};
-use reqwest::Url;
-use urlencoding::{encode_binary};
-use anyhow::Result;
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
+use ratatui::{
+    prelude::*,
+    symbols::border,
+    widgets::{block::*, *},
+};
 
-mod meta_info;
-mod tracker;
-mod utils;
-mod peer;
-mod bitfield;
-mod client;
-mod torrent;
+mod tui;
 
-use meta_info::{read_meta_info_file, render_meta_info, info_hash_hex, info_hash_buffer};
-use tracker::{fetch_announce_buffer_to_struct, stream_scrape_meta_info, fetch_scrape_meta_info, fetch_announce};
-use utils::{read_file};
-use crossbeam_channel::{unbounded, Sender};
-// use crate::client::Client;
-// use crate::torrent::Torrent;
-
-use futures_signals::signal_map::{SignalMapExt, MapDiff, MutableBTreeMap};
-
-#[derive(Clone, Debug)]
-struct Callback {
-    pub str: String
+fn main() -> io::Result<()> {
+    let mut terminal = tui::init()?;
+    let app_result = App::default().run(&mut terminal);
+    tui::restore()?;
+    app_result
 }
 
-#[derive(Clone, Debug)]
-struct TestStruct {
-    pub str: String,
-    pub callback: Sender<Callback>
+#[derive(Debug, Default)]
+pub struct App {
+    counter: u8,
+    exit: bool,
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    let map: MutableBTreeMap<&str, i32> = MutableBTreeMap::new();
-    let signal = map.signal_map();
-
-    tokio::spawn(async move {
-        let _ = signal.for_each(|change| {
-            match change {
-                MapDiff::Replace { entries } => {
-                    println!("Replace: {:?}", entries);
-                },
-                MapDiff::Insert { key, value } => {
-                    println!("Insert: {:?} {:?}", key, value);
-                },
-                MapDiff::Update { key, value } => {
-                    println!("Update: {:?} {:?}", key, value);
-                },
-                MapDiff::Remove { key } => {
-                    println!("Remove: {:?}", key);
-                },
-                MapDiff::Clear {} => {
-                    println!("Clear");
-                },
-            }
-            async {}
-        }).await;
-    });
-
-
-    let mut lock = map.lock_mut();
-    lock.insert("foo", 5);
-    lock.insert("bar", 10);
-
-
-
-    let (s, r) = unbounded();
-
-
-    let (s_callback, r_callback) = unbounded();
-    
-
-    s.send(TestStruct { callback: s_callback, str: "foo".to_string() }).unwrap();
-
-
-    let call = r.recv().unwrap();
-    call.callback.send(Callback { str: "bar".to_string() }).unwrap();
-
-    let call_response = r_callback.recv().unwrap();
-    // Receive the message from the channel.
-    println!("call {:?}", call.str);
-    println!("call response {:?}", call_response.str);
-
-    // let client = Client::new();
-
-    let meta_info: meta_info::MetaInfo = read_meta_info_file("./torrent_test.torrent").unwrap();
-    let info_hash = info_hash_hex(&meta_info);
-    let info_hash_buffer = info_hash_buffer(&meta_info).unwrap();
-    render_meta_info(&meta_info);
-    println!("infohash: {:?}", info_hash);
-
-    let result = encode_binary(&info_hash_buffer);
-    println!("infohash uri: {}", result);
-
-
-    let scrapes_stream = stream_scrape_meta_info(&meta_info)?;
-
-    // loop through the scrapes stream and log the results
-    scrapes_stream.for_each(|scrape| async move {
-        let url = Url::parse(&scrape.url).unwrap();
-        let hostname = url.host_str().unwrap();
-        let is_ok = match scrape.response.is_ok() {
-            true => "ok",
-            false => "failed"
-        };
-
-        if scrape.response.is_err() {
-            println!("{} {}", hostname, scrape.response.unwrap_err());
-            return
+impl App {
+    /// runs the application's main loop until the user quits
+    pub fn run(&mut self, terminal: &mut tui::Tui) -> io::Result<()> {
+        while !self.exit {
+            terminal.draw(|frame| self.render_frame(frame))?;
+            self.handle_events()?;
         }
+        Ok(())
+    }
 
-        let files = scrape
-            .response
-            .unwrap()
-            .files
-            .iter()
-            .map(|file_tuple| file_tuple.1.clone())
-            .collect::<Vec<tracker::TrackerScrapeResponseFile>>();
+    fn render_frame(&self, frame: &mut Frame) {
+        frame.render_widget(self, frame.size());
+    }
 
-        let mut files_incomplete =
-            files
-                .iter()
-                .map(|file| file.incomplete)
-                .collect::<Vec<i64>>();
-        files_incomplete.sort();
+    /// updates the application's state based on user input
+    fn handle_events(&mut self) -> io::Result<()> {
+        match event::read()? {
+            // it's important to check that the event is a key press event as
+            // crossterm also emits key release and repeat events on Windows.
+            Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
+                self.handle_key_event(key_event)
+            }
+            _ => {}
+        };
+        Ok(())
+    }
 
-        let mut files_complete =
-            files
-                .iter()
-                .map(|file| file.complete)
-                .collect::<Vec<i64>>();
-        files_complete.sort();
+    fn handle_key_event(&mut self, key_event: KeyEvent) {
+        match key_event.code {
+            KeyCode::Char('q') => self.exit(),
+            KeyCode::Left => self.decrement_counter(),
+            KeyCode::Right => self.increment_counter(),
+            _ => {}
+        }
+    }
 
-        let leechers =
-            files_incomplete.last().unwrap_or(&0).to_owned();
+    fn exit(&mut self) {
+        self.exit = true;
+    }
 
-        let seeders =
-            files_complete.last().unwrap_or(&0).to_owned();
+    fn increment_counter(&mut self) {
+        self.counter += 1;
+    }
 
-        println!("{} {} seeders: {} leechers: {}", hostname, is_ok, seeders, leechers);
-    }).await;
+    fn decrement_counter(&mut self) {
+        self.counter -= 1;
+    }
+}
 
+impl Widget for &App {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        let title = Title::from(" Counter App Tutorial ".bold());
+        let instructions = Title::from(Line::from(vec![
+            " Decrement ".into(),
+            "<Left>".blue().bold(),
+            " Increment ".into(),
+            "<Right>".blue().bold(),
+            " Quit ".into(),
+            "<Q> ".blue().bold(),
+        ]));
+        let block = Block::default()
+            .title(title.alignment(Alignment::Center))
+            .title(
+                instructions
+                    .alignment(Alignment::Center)
+                    .position(Position::Bottom),
+            )
+            .borders(Borders::ALL)
+            .border_set(border::THICK);
 
+        let counter_text = Text::from(vec![Line::from(vec![
+            "Value: ".into(),
+            self.counter.to_string().yellow(),
+        ])]);
 
+        Paragraph::new(counter_text)
+            .centered()
+            .block(block)
+            .render(area, buf);
+    }
+}
 
-    // let scrape_responses = fetch_scrape_meta_info(&meta_info).await?;
-    // // println!("scrapes: {:?}", scrape_responses);
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    // let first_scrape = scrape_responses.first().unwrap();
+    #[test]
+    fn render() {
+        let app = App::default();
+        let mut buf = Buffer::empty(Rect::new(0, 0, 50, 4));
 
+        app.render(buf.area, &mut buf);
 
+        let mut expected = Buffer::with_lines(vec![
+            "┏━━━━━━━━━━━━━ Counter App Tutorial ━━━━━━━━━━━━━┓",
+            "┃                    Value: 0                    ┃",
+            "┃                                                ┃",
+            "┗━ Decrement <Left> Increment <Right> Quit <Q> ━━┛",
+        ]);
+        let title_style = Style::new().bold();
+        let counter_style = Style::new().yellow();
+        let key_style = Style::new().blue().bold();
+        expected.set_style(Rect::new(14, 0, 22, 1), title_style);
+        expected.set_style(Rect::new(28, 1, 1, 1), counter_style);
+        expected.set_style(Rect::new(13, 3, 6, 1), key_style);
+        expected.set_style(Rect::new(30, 3, 7, 1), key_style);
+        expected.set_style(Rect::new(43, 3, 4, 1), key_style);
 
+        // note ratatui also has an assert_buffer_eq! macro that can be used to
+        // compare buffers and display the differences in a more readable way
+        assert_eq!(buf, expected);
+    }
 
-    // let announce_response = fetch_announce(&first_scrape.announce_url).await?;
-    // println!("first scrape announce: {:?}", announce_response);
+    #[test]
+    fn handle_key_event() -> io::Result<()> {
+        let mut app = App::default();
+        app.handle_key_event(KeyCode::Right.into());
+        assert_eq!(app.counter, 1);
 
-    // let scrape_url = "http://tracker.opentrackr.org:1337/scrape?info_hash=%08%AD%A5%A7%A6%18%3A%AE%1E%09%D81%DFgH%D5f%09Z%10";
-    // let scrape_response = tracker::fetch_scrape(scrape_url).await?;
+        app.handle_key_event(KeyCode::Left.into());
+        assert_eq!(app.counter, 0);
 
-    // let resp = read_file("./scrape").unwrap();
-    // let scrape_response = tracker::fetch_scrape_buffer_to_struct(resp).unwrap();
-    // println!("{:?}", scrape_response);
+        let mut app = App::default();
+        app.handle_key_event(KeyCode::Char('q').into());
+        assert_eq!(app.exit, true);
 
-
-    // let annnounce_url = "http://tracker.opentrackr.org:1337/announce?info_hash=%08%AD%A5%A7%A6%18%3A%AE%1E%09%D81%DFgH%D5f%09Z%10";
-    // let announce_response = fetch_announce(annnounce_url).await?;
-
-    // let resp = read_file("./announce").unwrap();
-    // let announce_response = announce::fetch_announce_buffer_to_struct(resp).unwrap();
-    // println!("{:?}", announce_response);
-
-    Ok(())
+        Ok(())
+    }
 }
