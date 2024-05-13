@@ -1,153 +1,157 @@
-use std::io;
+use std::time::Duration;
 
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
-use ratatui::{
-    prelude::*,
-    symbols::border,
-    widgets::{block::*, *},
-};
+use color_eyre::eyre::Result;
+use ratatui::{prelude::*, widgets::*};
+use tokio::sync::mpsc;
 
-mod tui;
-
-fn main() -> io::Result<()> {
-    let mut terminal = tui::init()?;
-    let app_result = App::default().run(&mut terminal);
-    tui::restore()?;
-    app_result
+pub fn initialize_panic_handler() {
+  let original_hook = std::panic::take_hook();
+  std::panic::set_hook(Box::new(move |panic_info| {
+    shutdown().unwrap();
+    original_hook(panic_info);
+  }));
 }
 
-#[derive(Debug, Default)]
-pub struct App {
-    counter: u8,
-    exit: bool,
+fn startup() -> Result<()> {
+  crossterm::terminal::enable_raw_mode()?;
+  crossterm::execute!(std::io::stderr(), crossterm::terminal::EnterAlternateScreen)?;
+  Ok(())
 }
 
-impl App {
-    /// runs the application's main loop until the user quits
-    pub fn run(&mut self, terminal: &mut tui::Tui) -> io::Result<()> {
-        while !self.exit {
-            terminal.draw(|frame| self.render_frame(frame))?;
-            self.handle_events()?;
-        }
-        Ok(())
-    }
+fn shutdown() -> Result<()> {
+  crossterm::execute!(std::io::stderr(), crossterm::terminal::LeaveAlternateScreen)?;
+  crossterm::terminal::disable_raw_mode()?;
+  Ok(())
+}
 
-    fn render_frame(&self, frame: &mut Frame) {
-        frame.render_widget(self, frame.size());
-    }
+struct App {
+  action_tx: mpsc::UnboundedSender<Action>,
+  counter: i64,
+  should_quit: bool,
+  ticker: i64,
+}
 
-    /// updates the application's state based on user input
-    fn handle_events(&mut self) -> io::Result<()> {
-        match event::read()? {
-            // it's important to check that the event is a key press event as
-            // crossterm also emits key release and repeat events on Windows.
-            Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
-                self.handle_key_event(key_event)
+fn ui(f: &mut Frame, app: &mut App) {
+  let area = f.size();
+  f.render_widget(
+    Paragraph::new(format!(
+      "Press j or k to increment or decrement.\n\nCounter: {}\n\nTicker: {}",
+      app.counter, app.ticker
+    ))
+    .block(
+      Block::default()
+        .title("ratatui async counter app")
+        .title_alignment(Alignment::Center)
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded),
+    )
+    .style(Style::default().fg(Color::Cyan))
+    .alignment(Alignment::Center),
+    area,
+  );
+}
+
+#[derive(PartialEq)]
+enum Action {
+  ScheduleIncrement,
+  ScheduleDecrement,
+  Increment,
+  Decrement,
+  Quit,
+  None,
+}
+
+fn update(app: &mut App, msg: Action) -> Action {
+  match msg {
+    Action::Increment => {
+      app.counter += 1;
+    },
+    Action::Decrement => {
+      app.counter -= 1;
+    },
+    Action::ScheduleIncrement => {
+      let tx = app.action_tx.clone();
+      tokio::spawn(async move {
+        // tokio::time::sleep(Duration::from_secs(5)).await;
+        tx.send(Action::Increment).unwrap();
+      });
+    },
+    Action::ScheduleDecrement => {
+      let tx = app.action_tx.clone();
+      tokio::spawn(async move {
+        // tokio::time::sleep(Duration::from_secs(5)).await;
+        tx.send(Action::Decrement).unwrap();
+      });
+    },
+    Action::Quit => app.should_quit = true, // You can handle cleanup and exit here
+    _ => {},
+  };
+  Action::None
+}
+
+fn handle_event(app: &App, tx: mpsc::UnboundedSender<Action>) -> tokio::task::JoinHandle<()> {
+  let tick_rate = std::time::Duration::from_millis(250);
+  tokio::spawn(async move {
+    loop {
+      let action = if crossterm::event::poll(tick_rate).unwrap() {
+        if let crossterm::event::Event::Key(key) = crossterm::event::read().unwrap() {
+          if key.kind == crossterm::event::KeyEventKind::Press {
+            match key.code {
+              crossterm::event::KeyCode::Char('j') => Action::ScheduleIncrement,
+              crossterm::event::KeyCode::Char('k') => Action::ScheduleDecrement,
+              crossterm::event::KeyCode::Char('q') => Action::Quit,
+              _ => Action::None,
             }
-            _ => {}
-        };
-        Ok(())
-    }
-
-    fn handle_key_event(&mut self, key_event: KeyEvent) {
-        match key_event.code {
-            KeyCode::Char('q') => self.exit(),
-            KeyCode::Left => self.decrement_counter(),
-            KeyCode::Right => self.increment_counter(),
-            _ => {}
+          } else {
+            Action::None
+          }
+        } else {
+          Action::None
         }
+      } else {
+        Action::None
+      };
+      if let Err(_) = tx.send(action) {
+        break;
+      }
     }
-
-    fn exit(&mut self) {
-        self.exit = true;
-    }
-
-    fn increment_counter(&mut self) {
-        self.counter += 1;
-    }
-
-    fn decrement_counter(&mut self) {
-        self.counter -= 1;
-    }
+  })
 }
 
-impl Widget for &App {
-    fn render(self, area: Rect, buf: &mut Buffer) {
-        let title = Title::from(" Counter App Tutorial ".bold());
-        let instructions = Title::from(Line::from(vec![
-            " Decrement ".into(),
-            "<Left>".blue().bold(),
-            " Increment ".into(),
-            "<Right>".blue().bold(),
-            " Quit ".into(),
-            "<Q> ".blue().bold(),
-        ]));
-        let block = Block::default()
-            .title(title.alignment(Alignment::Center))
-            .title(
-                instructions
-                    .alignment(Alignment::Center)
-                    .position(Position::Bottom),
-            )
-            .borders(Borders::ALL)
-            .border_set(border::THICK);
+async fn run() -> Result<()> {
+  let mut t = Terminal::new(CrosstermBackend::new(std::io::stderr()))?;
 
-        let counter_text = Text::from(vec![Line::from(vec![
-            "Value: ".into(),
-            self.counter.to_string().yellow(),
-        ])]);
+  let (action_tx, mut action_rx) = mpsc::unbounded_channel();
 
-        Paragraph::new(counter_text)
-            .centered()
-            .block(block)
-            .render(area, buf);
+  let mut app = App { counter: 0, should_quit: false, action_tx, ticker: 0 };
+
+  let task = handle_event(&app, app.action_tx.clone());
+
+  loop {
+    t.draw(|f| {
+      ui(f, &mut app);
+    })?;
+
+    if let Some(action) = action_rx.recv().await {
+      update(&mut app, action);
     }
+
+    if app.should_quit {
+      break;
+    }
+    app.ticker += 1;
+  }
+
+  task.abort();
+
+  Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn render() {
-        let app = App::default();
-        let mut buf = Buffer::empty(Rect::new(0, 0, 50, 4));
-
-        app.render(buf.area, &mut buf);
-
-        let mut expected = Buffer::with_lines(vec![
-            "┏━━━━━━━━━━━━━ Counter App Tutorial ━━━━━━━━━━━━━┓",
-            "┃                    Value: 0                    ┃",
-            "┃                                                ┃",
-            "┗━ Decrement <Left> Increment <Right> Quit <Q> ━━┛",
-        ]);
-        let title_style = Style::new().bold();
-        let counter_style = Style::new().yellow();
-        let key_style = Style::new().blue().bold();
-        expected.set_style(Rect::new(14, 0, 22, 1), title_style);
-        expected.set_style(Rect::new(28, 1, 1, 1), counter_style);
-        expected.set_style(Rect::new(13, 3, 6, 1), key_style);
-        expected.set_style(Rect::new(30, 3, 7, 1), key_style);
-        expected.set_style(Rect::new(43, 3, 4, 1), key_style);
-
-        // note ratatui also has an assert_buffer_eq! macro that can be used to
-        // compare buffers and display the differences in a more readable way
-        assert_eq!(buf, expected);
-    }
-
-    #[test]
-    fn handle_key_event() -> io::Result<()> {
-        let mut app = App::default();
-        app.handle_key_event(KeyCode::Right.into());
-        assert_eq!(app.counter, 1);
-
-        app.handle_key_event(KeyCode::Left.into());
-        assert_eq!(app.counter, 0);
-
-        let mut app = App::default();
-        app.handle_key_event(KeyCode::Char('q').into());
-        assert_eq!(app.exit, true);
-
-        Ok(())
-    }
+#[tokio::main]
+async fn main() -> Result<()> {
+  initialize_panic_handler();
+  startup()?;
+  run().await?;
+  shutdown()?;
+  Ok(())
 }
