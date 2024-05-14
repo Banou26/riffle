@@ -15,9 +15,9 @@ use tui::{initialize_panic_handler, run, shutdown, startup};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // initialize_panic_handler();
-    // startup()?;
+    initialize_panic_handler();
+    startup()?;
     run().await?;
-    // shutdown()?;
+    shutdown()?;
     Ok(())
 }

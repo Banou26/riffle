@@ -6,7 +6,7 @@ use futures_signals::{signal::SignalExt, signal_map::{MapDiff, MutableBTreeMap, 
 use ratatui::{prelude::*, widgets::*};
 use tokio::sync::mpsc;
 
-use crate::{client::{self, add_torrent, ClientMessage, TorrentClient}, meta_info::{read_meta_info_file, MetaInfo}, torrent::Torrent};
+use crate::{client::{TorrentClient}, meta_info::{read_meta_info_file, MetaInfo}, torrent::Torrent};
 
 pub fn initialize_panic_handler() {
   let original_hook = std::panic::take_hook();
@@ -30,18 +30,18 @@ pub fn shutdown() -> Result<()> {
 
 pub struct App {
   action_tx: mpsc::UnboundedSender<Action>,
-  counter: i64,
   should_quit: bool,
-  ticker: i64,
-  torrent_hashes: Vec<String>,
+  torrent_client: TorrentClient,
 }
 
 pub fn ui(f: &mut Frame, app: &mut App) {
+  let torrent_hashes = app.torrent_client.torrents.clone().into_keys().collect::<Vec<_>>();
+
   let area = f.size();
   f.render_widget(
     Paragraph::new(format!(
-      "Press j or k to increment or decrement.\n\nCounter: {}\n\nTicker: {}\n\nTorrents: {:?}",
-      app.counter, app.ticker, app.torrent_hashes
+      "\n\nTorrents: {:?}",
+      torrent_hashes
     ))
     .block(
       Block::default()
@@ -58,37 +58,13 @@ pub fn ui(f: &mut Frame, app: &mut App) {
 
 #[derive(PartialEq)]
 pub enum Action {
-  ScheduleIncrement,
-  ScheduleDecrement,
-  Increment,
-  Decrement,
   Quit,
   None,
 }
 
 pub fn update(app: &mut App, msg: Action) -> Action {
   match msg {
-    Action::Increment => {
-      app.counter += 1;
-    },
-    Action::Decrement => {
-      app.counter -= 1;
-    },
-    Action::ScheduleIncrement => {
-      let tx = app.action_tx.clone();
-      tokio::spawn(async move {
-        // tokio::time::sleep(Duration::from_secs(5)).await;
-        tx.send(Action::Increment).unwrap();
-      });
-    },
-    Action::ScheduleDecrement => {
-      let tx = app.action_tx.clone();
-      tokio::spawn(async move {
-        // tokio::time::sleep(Duration::from_secs(5)).await;
-        tx.send(Action::Decrement).unwrap();
-      });
-    },
-    Action::Quit => app.should_quit = true, // You can handle cleanup and exit here
+    Action::Quit => app.should_quit = true,
     _ => {},
   };
   Action::None
@@ -102,8 +78,6 @@ pub fn handle_event(app: &App, tx: mpsc::UnboundedSender<Action>) -> tokio::task
         if let crossterm::event::Event::Key(key) = crossterm::event::read().unwrap() {
           if key.kind == crossterm::event::KeyEventKind::Press {
             match key.code {
-              crossterm::event::KeyCode::Char('j') => Action::ScheduleIncrement,
-              crossterm::event::KeyCode::Char('k') => Action::ScheduleDecrement,
               crossterm::event::KeyCode::Char('q') => Action::Quit,
               _ => Action::None,
             }
@@ -125,20 +99,17 @@ pub fn handle_event(app: &App, tx: mpsc::UnboundedSender<Action>) -> tokio::task
 
 pub async fn run() -> Result<()> {
     let mut torrent_client = TorrentClient::new();
+
     let meta_info: MetaInfo =
       read_meta_info_file("./torrent_test.torrent")
         .context("Failed to read meta info file")?;
-
-    add_torrent(&mut torrent_client, meta_info)?;
-
+    torrent_client.add_torrent(meta_info)?;
 
     let mut t = Terminal::new(CrosstermBackend::new(std::io::stderr()))?;
     let (action_tx, mut action_rx) = mpsc::unbounded_channel();
-    let mut app = App { counter: 0, should_quit: false, action_tx, ticker: 0, torrent_hashes: vec![] };
+    let mut app = App { should_quit: false, action_tx, torrent_client };
     let task = handle_event(&app, app.action_tx.clone());
     loop {
-        app.torrent_hashes = torrent_client.torrents.clone().into_keys().collect::<Vec<_>>();
-
         t.draw(|f| {
           ui(f, &mut app);
         })?;
@@ -150,7 +121,6 @@ pub async fn run() -> Result<()> {
         if app.should_quit {
           break;
         }
-        app.ticker += 1;
     }
 
     task.abort();
