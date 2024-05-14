@@ -9,6 +9,8 @@ mod tracker;
 mod meta_info;
 mod torrent;
 mod utils;
+mod peer;
+mod bitfield;
 
 use tui::{initialize_panic_handler, run, shutdown, startup};
 

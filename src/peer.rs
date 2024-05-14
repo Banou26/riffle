@@ -1,4 +1,4 @@
-use crate::{bitfield::BitField, tracker::TrackerPeer, utils::IpAddr};
+use crate::{ bitfield::BitField, tracker::TrackerPeer, utils::IpAddr };
 
 /**
  * Overview
@@ -38,7 +38,7 @@ use crate::{bitfield::BitField, tracker::TrackerPeer, utils::IpAddr};
  */
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PeerWire {
   info: TrackerPeer,
 
@@ -69,7 +69,7 @@ pub struct PeerWire {
  * If a client receives a handshake with an info_hash that it is not currently serving, then the client must drop the connection.
  * If the initiator of the connection receives a handshake in which the peer_id does not match the expected peerid, then the initiator is expected to drop the connection. Note that the initiator presumably received the peer information from the tracker, which includes the peer_id that was registered by the peer. The peer_id from the tracker and in the handshake are expected to match.
  */
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Handshake {
   pstrlen: u8,
 
@@ -86,7 +86,7 @@ pub struct Handshake {
  * All of the remaining messages in the protocol take the form of <length prefix><message ID><payload>. The length prefix is a four byte big-endian value. The message ID is a single decimal byte. The payload is message dependent.
  */
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum MessageId {
   Choke = 0,
   Unchoke = 1,
@@ -102,7 +102,7 @@ pub enum MessageId {
   Port = 9,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Message {
   length_prefix: u32,
   message_id: MessageId,
@@ -112,7 +112,7 @@ pub struct Message {
 /**
  * The keep-alive message is a message with zero bytes, specified with the length prefix set to zero. There is no message ID and no payload. Peers may close a connection if they receive no messages (keep-alive or any other message) for a certain period of time, so a keep-alive message must be sent to maintain the connection alive if no command have been sent for a given amount of time. This amount of time is generally two minutes.
  */
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct KeepAlive {
   length_prefix: u32,
 }
@@ -121,7 +121,7 @@ pub struct KeepAlive {
  * The choke message is fixed-length and has no payload.
  * choke: <len=0001><id=0>
  */
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Choke {
   length_prefix: u32,
   message_id: MessageId,
@@ -131,7 +131,7 @@ pub struct Choke {
  * The unchoke message is fixed-length and has no payload.
  * unchoke: <len=0001><id=1>
  */
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Unchoke {
   length_prefix: u32,
   message_id: MessageId,
@@ -141,7 +141,7 @@ pub struct Unchoke {
  * The interested message is fixed-length and has no payload.
  * interested: <len=0001><id=2>
  */
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Interested {
   length_prefix: u32,
   message_id: MessageId,
@@ -151,7 +151,7 @@ pub struct Interested {
  * The not interested message is fixed-length and has no payload.
  * not interested: <len=0001><id=3>
  */
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NotInterested {
   length_prefix: u32,
   message_id: MessageId,
@@ -161,7 +161,7 @@ pub struct NotInterested {
  * The have message is fixed length. The payload is the zero-based index of a piece that has just been successfully downloaded and verified via the hash.
  * have: <len=0005><id=4><piece index>
  */
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Have {
   length_prefix: u32,
   message_id: MessageId,
@@ -173,7 +173,7 @@ pub struct Have {
  * bitfield: <len=0001+X><id=5><bitfield>
  * The bitfield message is variable length, where X is the length of the bitfield. The payload is a bitfield representing the pieces that have been successfully downloaded. The high bit in the first byte corresponds to piece index 0. Bits that are cleared indicated a missing piece, and set bits indicate a valid and available piece. Spare bits at the end are set to zero.
  */
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Bitfield {
   length_prefix: u32,
   message_id: MessageId,
@@ -192,7 +192,7 @@ pub struct Bitfield {
  * begin: integer specifying the zero-based byte offset within the piece
  * length: integer specifying the requested length.
  */
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Request {
   length_prefix: u32,
   message_id: MessageId,
@@ -213,7 +213,7 @@ pub struct Request {
  * begin: integer specifying the zero-based byte offset within the piece
  * block: block of data, which is a subset of the piece specified by index.
  */
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Piece {
   length_prefix: u32,
   message_id: MessageId,
@@ -229,7 +229,7 @@ pub struct Piece {
  * begin: integer specifying the zero-based byte offset within the piece
  * length: integer specifying the requested length.
  */
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Cancel {
   length_prefix: u32,
   message_id: MessageId,
@@ -243,7 +243,7 @@ pub struct Cancel {
  * port: <len=0003><id=9><listen-port>
  * listen-port is a 16-bit big-endian value.
  */
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Port {
   length_prefix: u32,
   message_id: MessageId,

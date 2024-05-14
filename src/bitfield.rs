@@ -1,5 +1,5 @@
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BitField {
   bits: Vec<u8>,
   length: usize,

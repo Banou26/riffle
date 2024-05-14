@@ -1,43 +1,44 @@
 use std::time::Instant;
 
-use crossbeam_channel::Receiver;
-use futures_signals::signal::{Mutable, MutableSignalCloned};
-
 use crate::meta_info::{info_hash_hex, MetaInfo};
-
+use crate::peer::PeerWire;
 
 #[derive(Debug, Clone)]
 pub struct Torrent {
   pub info_hash: String,
   pub meta_info: MetaInfo,
-  pub inserted_at: Instant,
+  pub inserted_at: Option<Instant>,
+  pub peers: Vec<PeerWire>
 }
 
-pub struct MakeTorrent {
-  pub meta_info: MetaInfo,
-  pub response_tx: crossbeam_channel::Sender<()>,
-}
+impl Torrent {
+  pub fn new(meta_info: MetaInfo) -> Self {
+    let info_hash = info_hash_hex(&meta_info);
+    Self {
+      info_hash,
+      meta_info,
+      inserted_at: Some(Instant::now()),
+      peers: vec![]
+    }
+  }
 
-pub enum ClientMessage {
-  RemoveTorrent(String)
-}
+  pub fn info_hash(&self) -> String {
+    info_hash_hex(&self.meta_info)
+  }
 
-pub fn make_torrent(torrent_options: MakeTorrent, rx: Receiver<ClientMessage>) -> MutableSignalCloned<Torrent>{
-  let info_hash = info_hash_hex(&torrent_options.meta_info);
-  let mut_torrent = Mutable::new(Torrent {
-    info_hash: info_hash.clone(),
-    meta_info: torrent_options.meta_info,
-    inserted_at: std::time::Instant::now(),
-});
-  let mut lock = mut_torrent.lock_mut();
+  pub fn meta_info(&self) -> MetaInfo {
+    self.meta_info.clone()
+  }
 
-  rx.iter().for_each(|message| {
-      match message {
-          ClientMessage::RemoveTorrent(info_hash) => {
-            
-          }
-      }
-  });
+  pub fn set_meta_info(&mut self, meta_info: MetaInfo) {
+    self.meta_info = meta_info;
+  }
 
-  mut_torrent.signal_cloned()
+  pub fn inserted_at(&self) -> Option<Instant> {
+    self.inserted_at.clone()
+  }
+
+  pub fn set_inserted_at(&mut self, inserted_at: Instant) {
+    self.inserted_at = Some(inserted_at);
+  }
 }

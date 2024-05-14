@@ -17,14 +17,8 @@ impl TorrentClient {
         }
     }
 
-    pub fn add_torrent(self: &mut TorrentClient, meta_info: MetaInfo) -> Result<Torrent>{
-        let info_hash = info_hash_hex(&meta_info);
-        let torrent = Torrent {
-            info_hash: info_hash.clone(),
-            meta_info,
-            inserted_at: std::time::Instant::now(),
-        };
-        self.torrents.insert(torrent.info_hash.clone(), torrent.clone());
-        Ok(torrent)
+    pub fn add_torrent(self: &mut TorrentClient, meta_info: MetaInfo) {
+        let torrent = Torrent::new(meta_info);
+        self.torrents.insert(torrent.info_hash(), torrent.clone());
     }
 }

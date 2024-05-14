@@ -40,18 +40,17 @@ pub fn ui(f: &mut Frame, app: &mut App) {
   let area = f.size();
   f.render_widget(
     Paragraph::new(format!(
-      "\n\nTorrents: {:?}",
+      "\n\nTorrents: {:#?}",
       torrent_hashes
     ))
     .block(
       Block::default()
-        .title("ratatui async counter app")
+        .title("Riffle")
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded),
     )
-    .style(Style::default().fg(Color::Cyan))
-    .alignment(Alignment::Center),
+    .style(Style::default().fg(Color::Cyan)),
     area,
   );
 }
@@ -103,7 +102,7 @@ pub async fn run() -> Result<()> {
     let meta_info: MetaInfo =
       read_meta_info_file("./torrent_test.torrent")
         .context("Failed to read meta info file")?;
-    torrent_client.add_torrent(meta_info)?;
+    torrent_client.add_torrent(meta_info);
 
     let mut t = Terminal::new(CrosstermBackend::new(std::io::stderr()))?;
     let (action_tx, mut action_rx) = mpsc::unbounded_channel();
