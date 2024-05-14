@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use crate::meta_info::{info_hash_hex, MetaInfo};
+use crate::meta_info::MetaInfo;
 use crate::peer::PeerWire;
 
 #[derive(Debug, Clone)]
@@ -13,7 +13,7 @@ pub struct Torrent {
 
 impl Torrent {
   pub fn new(meta_info: MetaInfo) -> Self {
-    let info_hash = info_hash_hex(&meta_info);
+    let info_hash = meta_info.to_info_hash();
     Self {
       info_hash,
       meta_info,
@@ -23,7 +23,7 @@ impl Torrent {
   }
 
   pub fn info_hash(&self) -> String {
-    info_hash_hex(&self.meta_info)
+    self.meta_info.to_info_hash()
   }
 
   pub fn meta_info(&self) -> MetaInfo {

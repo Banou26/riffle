@@ -4,7 +4,9 @@ use sha1::{Sha1, Digest};
 use serde_bencode::de;
 use serde_bencode::ser;
 use serde_bytes::ByteBuf;
-use std::io::{Read};
+use urlencoding::encode_binary;
+use std::borrow::Cow;
+use std::io::Read;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Node(String, i64);
@@ -39,6 +41,39 @@ pub struct Info {
     pub root_hash: Option<String>,
 }
 
+impl Info {
+    pub fn to_buffer(&self) -> Result<Vec<u8>> {
+        ser::to_bytes(self)
+            .context("Failed to serialize info")
+    }
+
+    pub fn to_hash_buffer(&self) -> Result<Vec<u8>> {
+        let buffer = self.to_buffer()?;
+        let mut hasher = Sha1::new();
+        hasher.update(buffer);
+        Ok(
+            hasher
+                .finalize()
+                .as_slice()
+                .to_vec()
+        )
+    }
+
+    pub fn to_hash_hex(&self) -> String {
+        let buffer = self.to_hash_buffer().unwrap();
+        hex::encode(buffer)
+    }
+
+    pub fn to_hash(&self) -> String {
+        self.to_hash_hex()
+    }
+
+    pub fn to_url_encoded(&self) -> Result<String> {
+        let info_hash_buffer = self.to_buffer().context("Failed to get info hash")?;
+        Ok(encode_binary(&info_hash_buffer).to_string())
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MetaInfo {
     pub info: Info,
@@ -63,81 +98,48 @@ pub struct MetaInfo {
     pub created_by: Option<String>,
 }
 
-pub fn render_meta_info(meta_info: &MetaInfo) {
-    println!("name:\t\t{}", meta_info.info.name);
-    println!("announce:\t{:?}", meta_info.announce);
-    println!("nodes:\t\t{:?}", meta_info.nodes);
-    if let Some(al) = &meta_info.announce_list {
-        for a in al {
-            println!("announce list:\t{}", a[0]);
+impl MetaInfo {
+    pub fn to_info_hash(&self) -> String {
+        self.info.to_hash()
+    }
+
+    pub fn tracker_urls(&self) -> Vec<String> {
+        let mut urls = Vec::new();
+        if let Some(announce) = &self.announce {
+            urls.push(announce.replace("announce", ""));
         }
-    }
-    println!("httpseeds:\t{:?}", meta_info.httpseeds);
-    println!("creation date:\t{:?}", meta_info.creation_date);
-    println!("comment:\t{:?}", meta_info.comment);
-    println!("created by:\t{:?}", meta_info.created_by);
-    println!("encoding:\t{:?}", meta_info.encoding);
-    println!("piece length:\t{:?}", meta_info.info.piece_length);
-    println!("private:\t{:?}", meta_info.info.private);
-    println!("root hash:\t{:?}", meta_info.info.root_hash);
-    println!("md5sum:\t\t{:?}", meta_info.info.md5sum);
-    println!("path:\t\t{:?}", meta_info.info.path);
-    if let Some(files) = &meta_info.info.files {
-        for f in files {
-            println!("file path:\t{:?}", f.path);
-            println!("file length:\t{}", f.length);
-            println!("file md5sum:\t{:?}", f.md5sum);
+        if let Some(announce_list) = &self.announce_list {
+            for announce in announce_list {
+                urls.push(announce[0].replace("announce", ""));
+            }
         }
+        urls
     }
-}
 
-pub fn parse_meta_info_buffer(buffer: &Vec<u8>) -> Result<MetaInfo> {
-    de::from_bytes::<MetaInfo>(&buffer)
-        .context("Failed to parse meta info buffer")
-}
-
-pub fn read_meta_info_file(str: &str) -> Result<MetaInfo> {
-    let mut file = std::fs::File::open(str)?;
-    let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer)?;
-    parse_meta_info_buffer(&buffer)
-}
-
-pub fn info_buffer(info: &Info) -> Result<Vec<u8>> {
-    ser::to_bytes(info)
-        .context("Failed to serialize info")
-}
-
-pub fn info_buffer_hash(buffer: &Vec<u8>) -> Result<Vec<u8>> {
-    let mut hasher = Sha1::new();
-    hasher.update(buffer);
-    Ok(
-        hasher
-            .finalize()
-            .as_slice()
-            .to_vec()
-    )
-}
-
-pub fn info_hash_buffer(meta_info: &MetaInfo) -> Result<Vec<u8>> {
-    let buffer = info_buffer(&meta_info.info).unwrap();
-    info_buffer_hash(&buffer)
-}
-
-pub fn info_hash_hex(meta_info: &MetaInfo) -> String {
-    let buffer = info_hash_buffer(meta_info).unwrap();
-    hex::encode(buffer)
-}
-
-pub fn tracker_urls(meta_info: &MetaInfo) -> Vec<String> {
-    let mut urls = Vec::new();
-    if let Some(announce) = &meta_info.announce {
-        urls.push(announce.replace("announce", ""));
+    pub fn from_buffer(buffer: &Vec<u8>) -> Result<MetaInfo> {
+        de::from_bytes::<MetaInfo>(&buffer)
+            .context("Failed to parse meta info buffer")
     }
-    if let Some(announce_list) = &meta_info.announce_list {
-        for announce in announce_list {
-            urls.push(announce[0].replace("announce", ""));
-        }
+    
+    pub fn from_file(str: &str) -> Result<MetaInfo> {
+        let mut file = std::fs::File::open(str)?;
+        let mut buffer = Vec::new();
+        file.read_to_end(&mut buffer)?;
+        MetaInfo::from_buffer(&buffer)
     }
-    urls
+
+    pub fn scrape_urls(&self) -> Result<Vec<String>> {
+        let url_encoded_info_hash = self.info.to_url_encoded()?;
+        let scrape_urls =
+            MetaInfo::tracker_urls(self)
+                .iter()
+                .map(|announce| {
+                    let mut url: String = announce.clone();
+                    url.push_str("scrape?info_hash=");
+                    url.push_str(&url_encoded_info_hash);
+                    url.replacen("udp", "http", 1)
+                })
+                .collect::<Vec<_>>();
+        Ok(scrape_urls)
+    }
 }

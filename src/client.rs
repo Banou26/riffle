@@ -1,8 +1,6 @@
 use std::collections::BTreeMap;
 
-use anyhow::Result;
-
-use crate::meta_info::{info_hash_hex, MetaInfo};
+use crate::meta_info::MetaInfo;
 use crate::torrent::Torrent;
 
 #[derive(Debug, Clone)]

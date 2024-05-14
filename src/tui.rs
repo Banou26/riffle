@@ -1,12 +1,8 @@
-use std::time::Duration;
-
-use anyhow::{Context, Result};
-use crossbeam_channel::unbounded;
-use futures_signals::{signal::SignalExt, signal_map::{MapDiff, MutableBTreeMap, SignalMapExt}};
+use anyhow::Result;
 use ratatui::{prelude::*, widgets::*};
 use tokio::sync::mpsc;
 
-use crate::{client::{TorrentClient}, meta_info::{read_meta_info_file, MetaInfo}, torrent::Torrent};
+use crate::{client::TorrentClient, meta_info::MetaInfo};
 
 pub fn initialize_panic_handler() {
   let original_hook = std::panic::take_hook();
@@ -99,9 +95,7 @@ pub fn handle_event(app: &App, tx: mpsc::UnboundedSender<Action>) -> tokio::task
 pub async fn run() -> Result<()> {
     let mut torrent_client = TorrentClient::new();
 
-    let meta_info: MetaInfo =
-      read_meta_info_file("./torrent_test.torrent")
-        .context("Failed to read meta info file")?;
+    let meta_info = MetaInfo::from_file("./torrent_test.torrent")?;
     torrent_client.add_torrent(meta_info);
 
     let mut t = Terminal::new(CrosstermBackend::new(std::io::stderr()))?;
