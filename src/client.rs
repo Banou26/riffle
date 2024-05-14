@@ -1,4 +1,5 @@
 use std::clone;
+use std::collections::BTreeMap;
 
 use anyhow::{Context, Result};
 use crossbeam_channel::{unbounded, Receiver, Sender};
@@ -22,59 +23,46 @@ pub enum ClientMessage {
 pub struct TorrentClient {
     tx: Sender<ClientMessage>,
     rx: Receiver<ClientMessage>,
-    // pub torrents: Vec<Torrent>,
-    pub torrents_mut: MutableBTreeMap<String, Torrent>,
+    pub torrents: BTreeMap<String, Torrent>,
 }
 
 impl TorrentClient {
     pub fn new() -> Self {
         let (tx, rx) = unbounded::<ClientMessage>();
-        let torrents_mut: MutableBTreeMap<String, Torrent> = MutableBTreeMap::new();
-
-        // let cloned_torrents_mut = torrents_mut.clone();
-        // let cloned_rx = rx.clone();
-        // tokio::spawn(async move {
-        //     cloned_rx.iter().for_each(|message| {
-        //         let lock = cloned_torrents_mut.lock_mut();
-        //         match message {
-        //             ClientMessage::AddTorrent(options) => {
-        //                 let info_hash = info_hash_hex(&options.meta_info);
-        //                 let torrent = Torrent {
-        //                     info_hash: info_hash.clone(),
-        //                     meta_info: options.meta_info,
-        //                     inserted_at: std::time::Instant::now(),
-        //                 };
-        //                 lock.clone().insert(info_hash, torrent);
-        //                 options.response_tx.send(()).unwrap();
-        //             },
-        //             ClientMessage::RemoveTorrent(info_hash) => {
-        //                 lock.clone().remove(&info_hash);
-        //             }
-        //         }
-        //     })
-        // });
+        let torrents = BTreeMap::new();
 
         Self {
             tx,
             rx,
-            torrents_mut
+            torrents
         }
     }
 
-    pub async fn add_torrent(&self, meta_info: MetaInfo) -> Result<Torrent>{
-        let info_hash = info_hash_hex(&meta_info);
-        let torrent = Torrent {
-            info_hash: info_hash.clone(),
-            meta_info,
-            inserted_at: std::time::Instant::now(),
-        };
-        // self.torrents_mut.lock_mut().insert(info_hash, torrent);
-        Ok(torrent)
-    }
+    // pub async fn add_torrent(&self, meta_info: MetaInfo) -> Result<Torrent>{
+    //     let info_hash = info_hash_hex(&meta_info);
+    //     let torrent = Torrent {
+    //         info_hash: info_hash.clone(),
+    //         meta_info,
+    //         inserted_at: std::time::Instant::now(),
+    //     };
+    //     &self.torrents.push(torrent.clone());
+    //     Ok(torrent)
+    // }
 
     // pub fn remove_torrent(&self, info_hash: String) {
     //     self.torrents.lock_mut().remove(&info_hash);
     // }
+}
+
+pub fn add_torrent(torrent_client: &mut TorrentClient, meta_info: MetaInfo) -> Result<Torrent>{
+    let info_hash = info_hash_hex(&meta_info);
+    let torrent = Torrent {
+        info_hash: info_hash.clone(),
+        meta_info,
+        inserted_at: std::time::Instant::now(),
+    };
+    torrent_client.torrents.insert(torrent.info_hash.clone(), torrent.clone());
+    Ok(torrent)
 }
 
 // pub fn make_client(rx: Receiver<ClientMessage>) -> Mutable<TorrentClient> {
