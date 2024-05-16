@@ -1,3 +1,5 @@
+use std::cmp;
+
 use anyhow::Result;
 use ratatui::{prelude::*, widgets::*};
 use tokio::sync::mpsc;
@@ -33,22 +35,62 @@ pub struct App {
 pub fn ui(f: &mut Frame, app: &mut App) {
   let torrent_hashes = app.torrent_client.torrents.clone().into_keys().collect::<Vec<_>>();
 
+  let header_size: u16 = 10;
+  let rest_size: u16 = 100 - header_size;
+
   let area = f.size();
-  f.render_widget(
-    Paragraph::new(format!(
-      "\n\nTorrents: {:#?}",
+
+  let layout = Layout::default()
+    .direction(Direction::Vertical)
+    .constraints(vec![
+        Constraint::Percentage(header_size),
+        Constraint::Percentage(rest_size),
+    ])
+    .split(area);
+
+  let mut state = ListState::default().with_selected(Some(0));
+
+  let collapsed_top_and_left_border_set = symbols::border::Set {
+      bottom_left: symbols::line::NORMAL.vertical_right,
+      bottom_right: symbols::line::NORMAL.vertical_left,
+      ..symbols::border::PLAIN
+  };
+
+  let header_widget =
+    List::new(
       torrent_hashes
-    ))
-    .block(
-      Block::default()
-        .title("Riffle")
-        .title_alignment(Alignment::Center)
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded),
+        .iter()
+        .map(|x| {
+          let torrent = app.torrent_client.torrents.get(x).unwrap();
+          ListItem::new(
+            Span::raw(format!("{}", torrent.meta_info.info.name))
+          )
+        })
+        .collect::<Vec<_>>()
     )
-    .style(Style::default().fg(Color::Cyan)),
-    area,
-  );
+      .highlight_symbol(">>")
+      .block(
+        Block::default()
+          .title(format!("Riffle"))
+          .title_alignment(Alignment::Center)
+          .border_set(collapsed_top_and_left_border_set)
+          .borders(Borders::ALL)
+      )
+      .style(Style::default().fg(Color::Cyan));
+
+  f.render_stateful_widget(header_widget, layout[0], &mut state);
+
+  let selected_torrent = app.torrent_client.torrents.get(torrent_hashes[state.selected().unwrap()].as_str()).unwrap();
+
+  let selected_torrent_widget =
+    Paragraph::new(selected_torrent.meta_info.info.name.clone())
+      .block(
+        Block::default()
+          .borders(Borders::BOTTOM | Borders::LEFT | Borders::RIGHT)
+      )
+      .style(Style::default().fg(Color::Cyan));
+
+  f.render_widget(selected_torrent_widget, layout[1]);
 }
 
 #[derive(PartialEq)]
