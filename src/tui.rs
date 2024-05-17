@@ -33,7 +33,71 @@ pub struct App {
     torrent_client: TorrentClient,
 }
 
-pub fn ui(f: &mut Frame, app: &mut App) {
+pub fn render_root_box(f: &mut Frame, area: Rect) -> Rect {
+    let outer = Block::default()
+        .borders(Borders::ALL)
+        .title("Riffle")
+        .title_alignment(Alignment::Center);
+
+    let inner = outer.inner(area);
+    f.render_widget(outer, area);
+
+    inner
+}
+
+pub fn render_torrent_selection(f: &mut Frame, app: &App, area: Rect) {
+    let mut state = ListState::default().with_selected(Some(0));
+
+    let header_widget = List::new(
+        app
+            .torrent_client
+            .torrents
+            .values()
+            .map(|torrent| {
+                let current_torrent_file_sizes = torrent
+                    .meta_info
+                    .info
+                    .files
+                    .clone()
+                    .unwrap()
+                    .iter()
+                    .map(|file| file.length)
+                    .reduce(|x, y| x + y)
+                    .unwrap_or(0);
+              
+                let current_torrent_total_size = torrent
+                    .meta_info
+                    .info
+                    .length
+                    .unwrap_or(current_torrent_file_sizes);
+              
+                let current_torrent_total_size_u64 = u64::try_from(current_torrent_total_size).unwrap();
+              
+                let current_torrent_size = format_size(
+                  current_torrent_total_size_u64,
+                    DECIMAL,
+                );
+
+                ListItem::new(Span::raw(format!(
+                    "{} ({})",
+                    torrent.meta_info.info.name,
+                    current_torrent_size
+                )))
+              })
+              .collect::<Vec<_>>()
+    )
+    .highlight_symbol(">>")
+    .block(
+        Block::default()
+            .title_alignment(Alignment::Center)
+            .borders(Borders::BOTTOM),
+    )
+    .style(Style::default().fg(Color::Cyan));
+
+    f.render_stateful_widget(header_widget, area, &mut state);
+}
+
+pub fn render_pieces(f: &mut Frame, app: &App, area: Rect) {
     let torrent_hashes = app
         .torrent_client
         .torrents
@@ -41,14 +105,33 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         .into_keys()
         .collect::<Vec<_>>();
 
-    let area = f.size();
+    let selected_torrent = app
+        .torrent_client
+        .torrents
+        .get(torrent_hashes[0].as_str())
+        .unwrap();
 
-    let mut state = ListState::default().with_selected(Some(0));
+    let chunks_lines = u16::try_from(selected_torrent.info().pieces.len() / area.width as usize).unwrap();
+
+    let pieces =
+        Paragraph::new( vec![0; chunks_lines.into()].iter().map(|x| "█").collect::<String>())
+            .wrap(Wrap { trim: false });
+
+    f.render_widget(pieces, area);
+}
+
+pub fn render_torrent_info(f: &mut Frame, app: &App, area: Rect) {
+    let torrent_hashes = app
+        .torrent_client
+        .torrents
+        .clone()
+        .into_keys()
+        .collect::<Vec<_>>();
 
     let selected_torrent = app
         .torrent_client
         .torrents
-        .get(torrent_hashes[state.selected().unwrap()].as_str())
+        .get(torrent_hashes[0].as_str())
         .unwrap();
 
     let current_torrent_file_sizes = selected_torrent
@@ -75,49 +158,49 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         DECIMAL,
     );
 
-    let header_widget = List::new(
-        torrent_hashes
-            .iter()
-            .map(|x| {
-                let torrent = app.torrent_client.torrents.get(x).unwrap();
-                ListItem::new(Span::raw(format!(
-                    "{} ({})",
-                    torrent.meta_info.info.name,
-                    current_torrent_size
-                )))
-            })
-            .collect::<Vec<_>>(),
-    )
-    .highlight_symbol(">>")
-    .block(
-        Block::default()
-            .title_alignment(Alignment::Center)
-            .borders(Borders::BOTTOM),
-    )
-    .style(Style::default().fg(Color::Cyan));
-
-    let outer =
-      Block::default()
-        .borders(Borders::ALL)
-        .title("Riffle")
-        .title_alignment(Alignment::Center);
-
-    let inner = outer.inner(area);
-    let layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints(vec![
-            Constraint::Length(torrent_hashes.len() as u16 + 2),
-            Constraint::Percentage(100),
-        ])
-        .split(inner);
-
-    f.render_widget(outer, area);
-    f.render_stateful_widget(header_widget, layout[0], &mut state);
-
     let selected_torrent_widget = Paragraph::new(selected_torrent.meta_info.info.name.clone())
         .alignment(Alignment::Center);
 
-    f.render_widget(selected_torrent_widget, layout[1]);
+    let chunks_lines = u16::try_from(selected_torrent.info().pieces.len() / area.width as usize).unwrap();
+
+    let chunks = Layout::default()
+      .direction(Direction::Vertical)
+      .constraints(vec![
+        //   Constraint::Percentage(90),
+          Constraint::Min(2),
+          Constraint::Length(chunks_lines),
+      ])
+      .split(area);
+
+    f.render_widget(selected_torrent_widget, chunks[0]);
+    render_pieces(f, app, chunks[1]);
+
+}
+
+pub fn draw(f: &mut Frame, app: &App) {
+    let size = render_root_box(f, f.size());
+    
+    let torrent_hashes = app
+        .torrent_client
+        .torrents
+        .clone()
+        .into_keys()
+        .collect::<Vec<_>>();
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(vec![
+            Constraint::Min(3),
+            Constraint::Percentage(100),
+        ])
+        .split(size);
+
+    render_torrent_selection(f, app, chunks[0]);
+    render_torrent_info(f, app, chunks[1]);
+}
+
+pub fn ui(f: &mut Frame, app: &mut App) {
+    draw(f, app);
 }
 
 #[derive(PartialEq)]

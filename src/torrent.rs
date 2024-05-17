@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use crate::meta_info::MetaInfo;
+use crate::meta_info::{Info, MetaInfo};
 use crate::peer::PeerWire;
 
 #[derive(Debug, Clone)]
@@ -28,6 +28,10 @@ impl Torrent {
 
     pub fn meta_info(&self) -> MetaInfo {
         self.meta_info.clone()
+    }
+
+    pub fn info(&self) -> Info {
+        self.meta_info.info.clone()
     }
 
     pub fn set_meta_info(&mut self, meta_info: MetaInfo) {
