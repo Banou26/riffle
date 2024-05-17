@@ -41,18 +41,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         .into_keys()
         .collect::<Vec<_>>();
 
-    let header_size: u16 = 10;
-    let rest_size: u16 = 100 - header_size;
-
     let area = f.size();
-
-    let layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints(vec![
-            Constraint::Percentage(header_size),
-            Constraint::Percentage(rest_size),
-        ])
-        .split(area);
 
     let mut state = ListState::default().with_selected(Some(0));
 
@@ -61,12 +50,6 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         .torrents
         .get(torrent_hashes[state.selected().unwrap()].as_str())
         .unwrap();
-
-    let collapsed_top_and_left_border_set = symbols::border::Set {
-        bottom_left: symbols::line::NORMAL.vertical_right,
-        bottom_right: symbols::line::NORMAL.vertical_left,
-        ..symbols::border::PLAIN
-    };
 
     let current_torrent_file_sizes = selected_torrent
         .meta_info
@@ -108,19 +91,31 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     .highlight_symbol(">>")
     .block(
         Block::default()
-            .title("Riffle".to_string())
             .title_alignment(Alignment::Center)
-            .border_set(collapsed_top_and_left_border_set)
-            .borders(Borders::ALL),
+            .borders(Borders::BOTTOM),
     )
     .style(Style::default().fg(Color::Cyan));
 
+    let outer =
+      Block::default()
+        .borders(Borders::ALL)
+        .title("Riffle")
+        .title_alignment(Alignment::Center);
+
+    let inner = outer.inner(area);
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(vec![
+            Constraint::Length(torrent_hashes.len() as u16 + 2),
+            Constraint::Percentage(100),
+        ])
+        .split(inner);
+
+    f.render_widget(outer, area);
     f.render_stateful_widget(header_widget, layout[0], &mut state);
 
     let selected_torrent_widget = Paragraph::new(selected_torrent.meta_info.info.name.clone())
-        .alignment(Alignment::Center)
-        .block(Block::default().borders(Borders::BOTTOM | Borders::LEFT | Borders::RIGHT))
-        .style(Style::default().fg(Color::Cyan));
+        .alignment(Alignment::Center);
 
     f.render_widget(selected_torrent_widget, layout[1]);
 }
