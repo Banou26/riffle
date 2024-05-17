@@ -4,7 +4,6 @@ use sha1::{Digest, Sha1};
 use serde_bencode::de;
 use serde_bencode::ser;
 use serde_bytes::ByteBuf;
-use std::borrow::Cow;
 use std::io::Read;
 use urlencoding::encode_binary;
 
@@ -23,6 +22,7 @@ pub struct File {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Info {
     pub name: String,
+    // 20 bytes per SHA1 hash
     pub pieces: ByteBuf,
     #[serde(rename = "piece length")]
     pub piece_length: i64,
@@ -65,6 +65,11 @@ impl Info {
     pub fn to_url_encoded(&self) -> Result<String> {
         let info_hash_buffer = self.to_buffer().context("Failed to get info hash")?;
         Ok(encode_binary(&info_hash_buffer).to_string())
+    }
+
+    pub fn pieces_count(&self) -> usize {
+        // 20 bytes per SHA1 hash
+        self.pieces.len() / 20
     }
 }
 

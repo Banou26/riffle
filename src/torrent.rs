@@ -1,5 +1,6 @@
 use std::time::Instant;
 
+use crate::bitfield::BitField;
 use crate::meta_info::{Info, MetaInfo};
 use crate::peer::PeerWire;
 
@@ -8,16 +9,19 @@ pub struct Torrent {
     pub info_hash: String,
     pub meta_info: MetaInfo,
     pub inserted_at: Option<Instant>,
+    pub pieces_bitfield: BitField,
     pub peers: Vec<PeerWire>,
 }
 
 impl Torrent {
     pub fn new(meta_info: MetaInfo) -> Self {
         let info_hash = meta_info.to_info_hash();
+        let pieces_bitfield = BitField::new(meta_info.info.pieces.len() / 20);
         Self {
             info_hash,
             meta_info,
             inserted_at: Some(Instant::now()),
+            pieces_bitfield,
             peers: vec![],
         }
     }
@@ -44,5 +48,9 @@ impl Torrent {
 
     pub fn set_inserted_at(&mut self, inserted_at: Instant) {
         self.inserted_at = Some(inserted_at);
+    }
+
+    pub fn downloaded_pieces(&self) -> u64 {
+        self.pieces_bitfield.iter().fold(0, |x, y| if y { x + 1 } else { x })
     }
 }

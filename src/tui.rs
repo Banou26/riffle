@@ -113,11 +113,29 @@ pub fn render_pieces(f: &mut Frame, app: &App, area: Rect) {
 
     let chunks_lines = u16::try_from(selected_torrent.info().pieces.len() / area.width as usize).unwrap();
 
+    let chunks = Layout::default()
+      .direction(Direction::Vertical)
+      .constraints(vec![
+          Constraint::Min(1),
+          Constraint::Length(chunks_lines),
+      ])
+      .split(area);
+
+    let piece_length_formatted = format_size(
+        u64::try_from(selected_torrent.info().piece_length).unwrap(),
+        DECIMAL,
+    );
+
+    let info =
+      Paragraph::new( format!("Pieces: {}/{} * {}", selected_torrent.downloaded_pieces(), selected_torrent.info().pieces_count(), piece_length_formatted))
+          .wrap(Wrap { trim: false });
+
     let pieces =
-        Paragraph::new( vec![0; chunks_lines.into()].iter().map(|x| "█").collect::<String>())
+        Paragraph::new( selected_torrent.pieces_bitfield.iter().map(|x| if x { "█" } else { "░" }).collect::<String>())
             .wrap(Wrap { trim: false });
 
-    f.render_widget(pieces, area);
+    f.render_widget(info, chunks[0]);
+    f.render_widget(pieces, chunks[1]);
 }
 
 pub fn render_torrent_info(f: &mut Frame, app: &App, area: Rect) {
@@ -168,7 +186,7 @@ pub fn render_torrent_info(f: &mut Frame, app: &App, area: Rect) {
       .constraints(vec![
         //   Constraint::Percentage(90),
           Constraint::Min(2),
-          Constraint::Length(chunks_lines),
+          Constraint::Min(chunks_lines),
       ])
       .split(area);
 
