@@ -1,29 +1,29 @@
-use crate::{ bitfield::BitField, tracker::TrackerPeer, utils::IpAddr };
+use crate::{bitfield::BitField, tracker::TrackerPeer, utils::IpAddr};
 
 /**
  * Overview
  * The peer protocol facilitates the exchange of pieces as described in the 'metainfo file.
- * 
+ *
  * Note here that the original specification also used the term "piece" when describing the peer protocol, but as a different term than "piece" in the metainfo file. For that reason, the term "block" will be used in this specification to describe the data that is exchanged between peers over the wire.
- * 
+ *
  * A client must maintain state information for each connection that it has with a remote peer:
- * 
+ *
  * choked: Whether or not the remote peer has choked this client. When a peer chokes the client, it is a notification that no requests will be answered until the client is unchoked. The client should not attempt to send requests for blocks, and it should consider all pending (unanswered) requests to be discarded by the remote peer.
  * interested: Whether or not the remote peer is interested in something this client has to offer. This is a notification that the remote peer will begin requesting blocks when the client unchokes them.
  * Note that this also implies that the client will also need to keep track of whether or not it is interested in the remote peer, and if it has the remote peer choked or unchoked. So, the real list looks something like this:
- * 
+ *
  * am_choking: this client is choking the peer
  * am_interested: this client is interested in the peer
  * peer_choking: peer is choking this client
  * peer_interested: peer is interested in this client
  * Client connections start out as "choked" and "not interested". In other words:
- * 
+ *
  * am_choking = 1
  * am_interested = 0
  * peer_choking = 1
  * peer_interested = 0
  * A block is downloaded by the client when the client is interested in a peer, and that peer is not choking the client. A block is uploaded by a client when the client is not choking a peer, and that peer is interested in the client.
- * 
+ *
  * It is important for the client to keep its peers informed as to whether or not it is interested in them. This state information should be kept up-to-date with each peer even when the client is choked. This will allow peers to know if the client will begin downloading when it is unchoked (and vice-versa).
  */
 
@@ -37,23 +37,22 @@ use crate::{ bitfield::BitField, tracker::TrackerPeer, utils::IpAddr };
  * The peer wire protocol consists of an initial handshake. After that, peers communicate via an exchange of length-prefixed messages. The length-prefix is an integer as described above.
  */
 
-
 #[derive(Debug, Clone)]
 pub struct PeerWire {
-  info: TrackerPeer,
+    info: TrackerPeer,
 
-  peer_id: Option<String>,
-  ip: IpAddr,
-  port: u16,
+    peer_id: Option<String>,
+    ip: IpAddr,
+    port: u16,
 
-  am_choking: bool,
-  am_interested: bool,
+    am_choking: bool,
+    am_interested: bool,
 
-  peer_choking: bool,
-  peer_interested: bool,
+    peer_choking: bool,
+    peer_interested: bool,
 
-  peer_bitfield: BitField,
-  bitfield: BitField,
+    peer_bitfield: BitField,
+    bitfield: BitField,
 }
 
 /**
@@ -71,15 +70,15 @@ pub struct PeerWire {
  */
 #[derive(Debug, Clone)]
 pub struct Handshake {
-  pstrlen: u8,
+    pstrlen: u8,
 
-  /** In version 1.0 of the BitTorrent protocol, pstrlen = 19, and pstr = "BitTorrent protocol". */
-  pstr: String,
-  // pstr: [u8; 19],
-  reserved: [u8; 8],
-  info_hash: [u8; 20],
+    /** In version 1.0 of the BitTorrent protocol, pstrlen = 19, and pstr = "BitTorrent protocol". */
+    pstr: String,
+    // pstr: [u8; 19],
+    reserved: [u8; 8],
+    info_hash: [u8; 20],
 
-  peer_id: [u8; 20],
+    peer_id: [u8; 20],
 }
 
 /**
@@ -88,25 +87,25 @@ pub struct Handshake {
 
 #[derive(Debug, Clone)]
 pub enum MessageId {
-  Choke = 0,
-  Unchoke = 1,
-  Interested = 2,
-  NotInterested = 3,
-  Have = 4,
-  /** 1 + x */
-  Bitfield = 5,
-  Request = 6,
-  /** 9 + x */
-  Piece = 7,
-  Cancel = 8,
-  Port = 9,
+    Choke = 0,
+    Unchoke = 1,
+    Interested = 2,
+    NotInterested = 3,
+    Have = 4,
+    /** 1 + x */
+    Bitfield = 5,
+    Request = 6,
+    /** 9 + x */
+    Piece = 7,
+    Cancel = 8,
+    Port = 9,
 }
 
 #[derive(Debug, Clone)]
 pub struct Message {
-  length_prefix: u32,
-  message_id: MessageId,
-  payload: Vec<u8>
+    length_prefix: u32,
+    message_id: MessageId,
+    payload: Vec<u8>,
 }
 
 /**
@@ -114,7 +113,7 @@ pub struct Message {
  */
 #[derive(Debug, Clone)]
 pub struct KeepAlive {
-  length_prefix: u32,
+    length_prefix: u32,
 }
 
 /**
@@ -123,8 +122,8 @@ pub struct KeepAlive {
  */
 #[derive(Debug, Clone)]
 pub struct Choke {
-  length_prefix: u32,
-  message_id: MessageId,
+    length_prefix: u32,
+    message_id: MessageId,
 }
 
 /**
@@ -133,8 +132,8 @@ pub struct Choke {
  */
 #[derive(Debug, Clone)]
 pub struct Unchoke {
-  length_prefix: u32,
-  message_id: MessageId,
+    length_prefix: u32,
+    message_id: MessageId,
 }
 
 /**
@@ -143,8 +142,8 @@ pub struct Unchoke {
  */
 #[derive(Debug, Clone)]
 pub struct Interested {
-  length_prefix: u32,
-  message_id: MessageId,
+    length_prefix: u32,
+    message_id: MessageId,
 }
 
 /**
@@ -153,8 +152,8 @@ pub struct Interested {
  */
 #[derive(Debug, Clone)]
 pub struct NotInterested {
-  length_prefix: u32,
-  message_id: MessageId,
+    length_prefix: u32,
+    message_id: MessageId,
 }
 
 /**
@@ -163,9 +162,9 @@ pub struct NotInterested {
  */
 #[derive(Debug, Clone)]
 pub struct Have {
-  length_prefix: u32,
-  message_id: MessageId,
-  piece_index: u32,
+    length_prefix: u32,
+    message_id: MessageId,
+    piece_index: u32,
 }
 
 /**
@@ -175,9 +174,9 @@ pub struct Have {
  */
 #[derive(Debug, Clone)]
 pub struct Bitfield {
-  length_prefix: u32,
-  message_id: MessageId,
-  bitfield: Vec<u8>,
+    length_prefix: u32,
+    message_id: MessageId,
+    bitfield: Vec<u8>,
 }
 
 /**
@@ -194,11 +193,11 @@ pub struct Bitfield {
  */
 #[derive(Debug, Clone)]
 pub struct Request {
-  length_prefix: u32,
-  message_id: MessageId,
-  index: u32,
-  begin: u32,
-  length: u32,
+    length_prefix: u32,
+    message_id: MessageId,
+    index: u32,
+    begin: u32,
+    length: u32,
 }
 
 /**
@@ -215,11 +214,11 @@ pub struct Request {
  */
 #[derive(Debug, Clone)]
 pub struct Piece {
-  length_prefix: u32,
-  message_id: MessageId,
-  index: u32,
-  begin: u32,
-  block: Vec<u8>,
+    length_prefix: u32,
+    message_id: MessageId,
+    index: u32,
+    begin: u32,
+    block: Vec<u8>,
 }
 
 /**
@@ -231,11 +230,11 @@ pub struct Piece {
  */
 #[derive(Debug, Clone)]
 pub struct Cancel {
-  length_prefix: u32,
-  message_id: MessageId,
-  index: u32,
-  begin: u32,
-  length: u32,
+    length_prefix: u32,
+    message_id: MessageId,
+    index: u32,
+    begin: u32,
+    length: u32,
 }
 
 /**
@@ -245,7 +244,7 @@ pub struct Cancel {
  */
 #[derive(Debug, Clone)]
 pub struct Port {
-  length_prefix: u32,
-  message_id: MessageId,
-  listen_port: u16,
+    length_prefix: u32,
+    message_id: MessageId,
+    listen_port: u16,
 }

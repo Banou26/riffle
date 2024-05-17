@@ -1,22 +1,22 @@
 use anyhow::{Context, Result};
-use sha1::{Sha1, Digest};
+use sha1::{Digest, Sha1};
 
 use serde_bencode::de;
 use serde_bencode::ser;
 use serde_bytes::ByteBuf;
-use urlencoding::encode_binary;
 use std::borrow::Cow;
 use std::io::Read;
+use urlencoding::encode_binary;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Node(String, i64);
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct File {
-    path: Vec<String>,
-    length: i64,
+    pub path: Vec<String>,
+    pub length: i64,
     #[serde(default)]
-    md5sum: Option<String>,
+    pub md5sum: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -43,20 +43,14 @@ pub struct Info {
 
 impl Info {
     pub fn to_buffer(&self) -> Result<Vec<u8>> {
-        ser::to_bytes(self)
-            .context("Failed to serialize info")
+        ser::to_bytes(self).context("Failed to serialize info")
     }
 
     pub fn to_hash_buffer(&self) -> Result<Vec<u8>> {
         let buffer = self.to_buffer()?;
         let mut hasher = Sha1::new();
         hasher.update(buffer);
-        Ok(
-            hasher
-                .finalize()
-                .as_slice()
-                .to_vec()
-        )
+        Ok(hasher.finalize().as_slice().to_vec())
     }
 
     pub fn to_hash_hex(&self) -> String {
@@ -117,10 +111,9 @@ impl MetaInfo {
     }
 
     pub fn from_buffer(buffer: &Vec<u8>) -> Result<MetaInfo> {
-        de::from_bytes::<MetaInfo>(&buffer)
-            .context("Failed to parse meta info buffer")
+        de::from_bytes::<MetaInfo>(&buffer).context("Failed to parse meta info buffer")
     }
-    
+
     pub fn from_file(str: &str) -> Result<MetaInfo> {
         let mut file = std::fs::File::open(str)?;
         let mut buffer = Vec::new();
@@ -130,16 +123,15 @@ impl MetaInfo {
 
     pub fn scrape_urls(&self) -> Result<Vec<String>> {
         let url_encoded_info_hash = self.info.to_url_encoded()?;
-        let scrape_urls =
-            MetaInfo::tracker_urls(self)
-                .iter()
-                .map(|announce| {
-                    let mut url: String = announce.clone();
-                    url.push_str("scrape?info_hash=");
-                    url.push_str(&url_encoded_info_hash);
-                    url.replacen("udp", "http", 1)
-                })
-                .collect::<Vec<_>>();
+        let scrape_urls = MetaInfo::tracker_urls(self)
+            .iter()
+            .map(|announce| {
+                let mut url: String = announce.clone();
+                url.push_str("scrape?info_hash=");
+                url.push_str(&url_encoded_info_hash);
+                url.replacen("udp", "http", 1)
+            })
+            .collect::<Vec<_>>();
         Ok(scrape_urls)
     }
 }

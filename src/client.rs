@@ -11,7 +11,7 @@ pub struct TorrentClient {
 impl TorrentClient {
     pub fn new() -> Self {
         Self {
-            torrents: BTreeMap::new()
+            torrents: BTreeMap::new(),
         }
     }
 

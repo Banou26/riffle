@@ -3,17 +3,16 @@ extern crate serde_derive;
 
 use anyhow::Result;
 
-mod tui;
-mod client;
-mod tracker;
-mod meta_info;
-mod torrent;
-mod utils;
-mod peer;
 mod bitfield;
+mod client;
+mod meta_info;
+mod peer;
+mod torrent;
+mod tracker;
+mod tui;
+mod utils;
 
 use tui::{initialize_panic_handler, run, shutdown, startup};
-
 
 #[tokio::main]
 async fn main() -> Result<()> {

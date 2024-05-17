@@ -1,6 +1,10 @@
-use std::{fs::File, io::Read, net::{Ipv4Addr, Ipv6Addr}};
+use std::{
+    fs::File,
+    io::Read,
+    net::{Ipv4Addr, Ipv6Addr},
+};
 
-use anyhow::{Result, Error};
+use anyhow::{Error, Result};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum IpAddr {
@@ -20,14 +24,10 @@ pub async fn fetch_buffer(url: &str) -> Result<Vec<u8>> {
     let resp = reqwest::get(url).await?;
 
     if (resp.status().as_u16() / 100) != 2 {
-      return Err(Error::msg(format!("Bad status code: {}", resp.status())));
+        return Err(Error::msg(format!("Bad status code: {}", resp.status())));
     }
 
-    let buffer =
-      resp
-        .bytes()
-        .await?
-        .to_vec();
+    let buffer = resp.bytes().await?.to_vec();
 
     Ok(buffer)
 }
