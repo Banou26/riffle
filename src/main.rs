@@ -11,6 +11,7 @@ mod torrent;
 mod tracker;
 mod tui;
 mod utils;
+mod piece_picker;
 
 use tui::{initialize_panic_handler, run, shutdown, startup};
 

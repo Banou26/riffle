@@ -51,8 +51,23 @@ pub struct PeerWire {
     peer_choking: bool,
     peer_interested: bool,
 
-    peer_bitfield: BitField,
-    bitfield: BitField,
+    peer_bitfield: BitField
+}
+
+impl PeerWire {
+    pub fn new(info: TrackerPeer, peer_id: Option<String>, ip: IpAddr, port: u16) -> Self {
+        Self {
+            info,
+            peer_id,
+            ip,
+            port,
+            am_choking: true,
+            am_interested: false,
+            peer_choking: true,
+            peer_interested: false,
+            peer_bitfield: BitField::new(0)
+        }
+    }
 }
 
 /**
