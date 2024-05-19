@@ -1,9 +1,21 @@
 
-import { createMachine } from 'xstate';
+import type { Instance as TorrentFile } from 'parse-torrent'
 
-export const Torrent = createMachine({
+import { createMachine } from 'xstate'
+
+export const torrent = createMachine({
   id: 'torrent',
-  initial: 'idle'
+  initial: 'checking',
+  context: {
+    torrentFile: undefined as unknown as TorrentFile,
+  } as { torrentFile: TorrentFile },
+  states: {
+    checking: {},
+    downloading: {},
+    seeding: {},
+    completed: {},
+    paused: {},
+  },
 })
 
-export type Torrent = typeof Torrent
+export type Torrent = typeof torrent

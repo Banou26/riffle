@@ -1,23 +1,39 @@
+import type { Instance as TorrentFile } from 'parse-torrent'
+
 import type { Torrent } from './torrent'
 
-import { assign, createActor, createMachine } from 'xstate'
+import { assign, createActor, setup } from 'xstate'
 
-export const TorrentClient = createMachine({
+import { torrent } from './torrent'
+
+export const TorrentClient = setup({
+  actors: {
+    torrent,
+  },
+  actions: {
+    addTorrent: assign({
+      torrents: ({ spawn }) => [...torrents, torrentFile]
+    })
+  }
+}).createMachine({
   id: 'torrent-client',
   initial: 'idle',
   context: ({ input }: { input: { torrents: Torrent[] } }) => ({
     torrents: input.torrents
   }),
+  states: {
+    idle: {}
+  },
   invoke: {
     id: 'addTorrent',
-    src: 'fetchUser',
-    input: ({ context: { userId } }) => ({ userId }),
+    src: 'torrent',
+    input: ({ context: { torrentFile } }: { context: { torrentFile: TorrentFile } }) => ({ torrentFile }),
     onDone: {
-      target: 'success',
+      target: '.idle',
       actions: assign({ user: ({ event }) => event.output }),
     },
     onError: {
-      target: 'failure',
+      target: '.idle',
       actions: assign({ error: ({ event }) => event.error }),
     },
   }
@@ -31,6 +47,8 @@ export const makeClient = () => {
   })
 
   return {
-
+    addTorrent: (torrentFile: TorrentFile) => {
+      torrentClientActor.send({ type: 'addTorrent' })
+    }
   }
 }

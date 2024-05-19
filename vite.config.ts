@@ -1,4 +1,8 @@
+import { builtinModules } from 'module'
+
 import { defineConfig } from 'vite'
+
+import pkg from './package.json'
 
 export default defineConfig({
   build: {
@@ -9,6 +13,12 @@ export default defineConfig({
       name: 'index'
     },
     sourcemap: true,
-    minify: false
+    minify: false,
+    rollupOptions: {
+      external: [
+        ...builtinModules,
+        ...Object.keys(pkg.dependencies)
+      ]
+    }
   }
 })
